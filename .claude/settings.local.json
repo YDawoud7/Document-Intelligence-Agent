@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/Users/ydawoud/.local/bin/uv add langchain-anthropic langchain-tavily tavily-python)",
+      "Bash(git add pyproject.toml uv.lock .gitignore src/config.py)",
+      "Bash(git commit -m \"Add Phase 2 deps and config\")"
+    ]
+  }
+}
