@@ -22,3 +22,8 @@ CHUNK_OVERLAP = 200
 # all-MiniLM-L6-v2: 384-dimensional, fast, ~80MB download, strong semantic quality.
 # Runs locally — no API key required.
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+
+# Agent LLM
+# Haiku is fast and cheap — ideal for agentic loops where multiple LLM calls happen
+# per query (tool routing + synthesis). Swap for claude-sonnet-4-6 for higher quality.
+CLAUDE_MODEL = "claude-haiku-4-5-20251001"
