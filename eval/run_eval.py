@@ -47,11 +47,15 @@ def score_routing(intermediate_steps: list, expected_tools: list[str]) -> float:
 
 
 def score_content(answer: str, expected_contains: list[str]) -> float:
-    """Fraction of expected substrings found in the answer (case-insensitive)."""
+    """Fraction of expected substrings found in the answer (case-insensitive).
+
+    Commas are stripped from both sides before matching so that "93075"
+    matches an answer that contains "93,075" (and vice versa).
+    """
     if not expected_contains:
         return 1.0
-    answer_lower = answer.lower()
-    hits = sum(1 for kw in expected_contains if kw.lower() in answer_lower)
+    answer_norm = answer.lower().replace(",", "")
+    hits = sum(1 for kw in expected_contains if kw.lower().replace(",", "") in answer_norm)
     return hits / len(expected_contains)
 
 

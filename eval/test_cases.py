@@ -182,7 +182,7 @@ TEST_CASES = [
         "category": "edge",
         "query": "What is (2**10 + 3**5) * 7?",
         "expected_tools": ["calculate"],
-        "expected_contains": ["8911"],
+        "expected_contains": ["8869"],
         "description": "Complex arithmetic expression",
     },
     {
