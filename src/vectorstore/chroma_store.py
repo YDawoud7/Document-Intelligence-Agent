@@ -73,3 +73,24 @@ class ChromaStore:
     def count(self) -> int:
         """Return the number of chunks currently stored in the collection."""
         return self._store._collection.count()
+
+    def list_sources(self) -> dict[str, int]:
+        """Return {filename: chunk_count} for every document in the collection."""
+        result = self._store._collection.get(include=["metadatas"])
+        counts: dict[str, int] = {}
+        for meta in result["metadatas"]:
+            src = meta.get("source", "unknown")
+            counts[src] = counts.get(src, 0) + 1
+        return counts
+
+    def delete_document(self, source: str) -> int:
+        """Delete all chunks whose metadata source == source. Returns chunks deleted.
+
+        ChromaDB requires deletion by ID, so we first fetch matching IDs via a
+        metadata filter, then delete them in one call.
+        """
+        result = self._store._collection.get(where={"source": source}, include=[])
+        ids = result["ids"]
+        if ids:
+            self._store._collection.delete(ids=ids)
+        return len(ids)
