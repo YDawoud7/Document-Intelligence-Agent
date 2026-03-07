@@ -6,7 +6,10 @@ All tests are deterministic — no API calls, no mocks needed.
 import pytest
 
 from src.agent.agent import _check_grounding, _REFUSAL_PATTERNS, query_agent
-from src.agent.tools import _INJECTION_PATTERNS, search_documents, extract_entities
+from src.agent.tools import _INJECTION_PATTERNS, search_documents, TOOLS
+
+# extract_entities is built inside build_tools(), grab it from the default TOOLS list
+extract_entities = TOOLS[3]  # [search_documents, calculate, web_search, extract_entities]
 
 
 # ── Input validation: query_agent ────────────────────────────────────────────

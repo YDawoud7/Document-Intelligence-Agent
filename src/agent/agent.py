@@ -2,17 +2,25 @@
 Agent construction and query execution with production guardrails.
 
 How it works:
-  1. ChatAnthropic is the reasoning LLM — it decides which tool to call.
-  2. create_tool_calling_agent binds the tools to Claude using its native
+  1. An LLM (Claude, GPT-4o, or DeepSeek) is the reasoning model — it decides
+     which tool to call.
+  2. create_tool_calling_agent binds the tools to the LLM using its native
      tool-use API (structured JSON calls, not fragile text parsing).
   3. AgentExecutor runs the tool-call loop: invoke tool → feed result back
-     to Claude → repeat until Claude emits a final answer.
+     to the LLM → repeat until it emits a final answer.
 
 The prompt has three parts:
-  - system: tells Claude its role and what each tool category is for
+  - system: tells the LLM its role and what each tool category is for
   - human: the user's question (passed as {input})
   - placeholder agent_scratchpad: where LangChain injects tool call history
-    so Claude can see what it has already done each iteration
+    so the LLM can see what it has already done each iteration
+
+MULTI-MODEL SUPPORT (Phase 4):
+  build_agent() accepts a provider parameter to swap the LLM:
+    - "anthropic" → Claude Haiku (default)
+    - "openai"    → GPT-4o
+    - "deepseek"  → DeepSeek Chat (via OpenAI-compatible API)
+  Tools, prompt, and AgentExecutor stay identical across models.
 
 GUARDRAILS (Phase 3):
   query_agent() is the recommended entry point. It wraps agent.invoke() with:
@@ -30,14 +38,13 @@ import logging
 import re
 
 from dotenv import load_dotenv
-from langchain_anthropic import ChatAnthropic
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate
 
-from src.agent.tools import TOOLS
+from src.agent.tools import build_tools
 from src.config import CLAUDE_MODEL, MAX_QUERY_LENGTH
 
-load_dotenv()  # reads ANTHROPIC_API_KEY and TAVILY_API_KEY from .env
+load_dotenv()  # reads API keys from .env
 
 logger = logging.getLogger(__name__)
 
@@ -56,16 +63,54 @@ For complex questions, use multiple tools in sequence and synthesize the results
 Always cite the source file and page when referencing document content."""
 
 
-def build_agent() -> AgentExecutor:
+def _create_llm(provider: str = "anthropic", model_name: str | None = None):
+    """Instantiate the right LangChain chat model for the given provider.
+
+    All three providers support tool calling, so the rest of the agent setup
+    (prompt, tools, AgentExecutor) stays identical.
+    """
+    if provider == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(
+            model=model_name or CLAUDE_MODEL,
+            temperature=0,
+            max_tokens=2048,
+        )
+    elif provider == "openai":
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model_name or "gpt-4o",
+            temperature=0,
+            max_tokens=2048,
+        )
+    elif provider == "deepseek":
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model_name or "deepseek-chat",
+            base_url="https://api.deepseek.com/v1",
+            temperature=0,
+            max_tokens=2048,
+        )
+    else:
+        raise ValueError(f"Unknown provider: {provider}")
+
+
+def build_agent(
+    provider: str = "anthropic",
+    model_name: str | None = None,
+    callbacks: list | None = None,
+) -> AgentExecutor:
     """Construct and return a ready-to-invoke AgentExecutor.
 
-    Reads ANTHROPIC_API_KEY and TAVILY_API_KEY from the environment (via .env).
+    Args:
+        provider: "anthropic" (default), "openai", or "deepseek".
+        model_name: Override the default model for the provider.
+        callbacks: Optional list of callback handlers (e.g. TokenTrackingHandler).
     """
-    llm = ChatAnthropic(
-        model=CLAUDE_MODEL,
-        temperature=0,      # deterministic routing — same query, same tool choice
-        max_tokens=2048,
-    )
+    llm = _create_llm(provider, model_name)
+
+    # build_tools(llm) ensures extract_entities uses the same model as the agent
+    tools = build_tools(llm)
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
@@ -74,15 +119,16 @@ def build_agent() -> AgentExecutor:
         ("placeholder", "{agent_scratchpad}"),
     ])
 
-    agent = create_tool_calling_agent(llm=llm, tools=TOOLS, prompt=prompt)
+    agent = create_tool_calling_agent(llm=llm, tools=tools, prompt=prompt)
 
     return AgentExecutor(
         agent=agent,
-        tools=TOOLS,
+        tools=tools,
         verbose=True,               # prints tool calls and intermediate steps
         max_iterations=6,           # safety cap against infinite tool loops
-        handle_parsing_errors=True, # feeds malformed tool calls back to Claude to retry
+        handle_parsing_errors=True, # feeds malformed tool calls back to the LLM to retry
         return_intermediate_steps=True,  # needed for output guardrails
+        callbacks=callbacks,
     )
 
 
@@ -174,6 +220,7 @@ def query_agent(agent: AgentExecutor, query: str) -> dict:
       - "snippets": list of retrieved document snippets (if any)
       - "warning": optional warning string
       - "success": bool
+      - "intermediate_steps": list of (AgentAction, observation) tuples
 
     Guardrail cascade:
       1. Input validation — reject empty / oversized queries
@@ -187,6 +234,7 @@ def query_agent(agent: AgentExecutor, query: str) -> dict:
         return {
             "answer": "Please provide a question.",
             "snippets": [], "warning": None, "success": False,
+            "intermediate_steps": [],
         }
 
     query = query.strip()
@@ -197,6 +245,7 @@ def query_agent(agent: AgentExecutor, query: str) -> dict:
                 f"Please shorten your question."
             ),
             "snippets": [], "warning": None, "success": False,
+            "intermediate_steps": [],
         }
 
     # ── 2. Run the agent ──────────────────────────────────────────────────
@@ -209,6 +258,7 @@ def query_agent(agent: AgentExecutor, query: str) -> dict:
             "snippets": [],
             "warning": f"Error: {type(e).__name__}",
             "success": False,
+            "intermediate_steps": [],
         }
 
     answer = result.get("output", "").strip()
@@ -232,6 +282,7 @@ def query_agent(agent: AgentExecutor, query: str) -> dict:
             "snippets": snippets,
             "warning": "Agent did not produce a final answer",
             "success": False,
+            "intermediate_steps": intermediate_steps,
         }
 
     # ── 5. Low-confidence detection ───────────────────────────────────────
@@ -253,4 +304,5 @@ def query_agent(agent: AgentExecutor, query: str) -> dict:
         "snippets": snippets,
         "warning": warning,
         "success": True,
+        "intermediate_steps": intermediate_steps,
     }

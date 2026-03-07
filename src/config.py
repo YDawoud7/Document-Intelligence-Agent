@@ -43,3 +43,35 @@ logging.basicConfig(
     format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
     datefmt="%H:%M:%S",
 )
+
+# ── Model configurations ──────────────────────────────────────────────────────
+# Each entry maps a shorthand name to its provider, model ID, and API key env var.
+# DeepSeek uses the OpenAI-compatible API, so it needs a base_url override.
+SUPPORTED_MODELS = {
+    "haiku": {
+        "provider": "anthropic",
+        "model_name": "claude-haiku-4-5-20251001",
+        "api_key_env": "ANTHROPIC_API_KEY",
+    },
+    "gpt4o": {
+        "provider": "openai",
+        "model_name": "gpt-4o",
+        "api_key_env": "OPENAI_API_KEY",
+    },
+    "deepseek": {
+        "provider": "deepseek",
+        "model_name": "deepseek-chat",
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com/v1",
+    },
+}
+
+# $ per 1M tokens — last updated 2025-03
+MODEL_PRICING = {
+    "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.00},
+    "gpt-4o":                    {"input": 2.50, "output": 10.00},
+    "deepseek-chat":             {"input": 0.27, "output": 1.10},
+}
+
+# Eval output
+EVAL_RESULTS_DIR = ROOT_DIR / "eval_results"

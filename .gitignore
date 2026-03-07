@@ -11,3 +11,6 @@ wheels/
 
 # Secrets
 .env
+
+# Eval output
+eval_results/

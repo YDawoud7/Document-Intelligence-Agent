@@ -231,62 +231,77 @@ class DocumentEntities(BaseModel):
     key_terms: list[str] = Field(default_factory=list, description="Domain-specific terms or identifiers")
 
 
-@tool
-def extract_entities(text: str) -> str:
-    """Extract structured named entities and key fields from a passage of document text.
-    Returns a structured breakdown of: people, organizations, dates, monetary amounts,
-    locations, and key terms found in the text. Use this tool when you need to identify
-    and organize specific information from retrieved document passages, such as parsing
-    contract parties, invoice details, or report metadata."""
-    if len(text) > MAX_EXTRACT_TEXT_LENGTH:
-        return f"Error: text too long ({len(text)} chars, max {MAX_EXTRACT_TEXT_LENGTH})."
-    if len(text.strip()) < 10:
-        return "Error: text too short for meaningful entity extraction."
-
-    # Injection detection — the text is embedded in a prompt, so check for
-    # manipulation attempts. This is a heuristic tripwire, not bulletproof.
-    if _INJECTION_PATTERNS.search(text):
-        logger.warning("Possible prompt injection detected in extract_entities input")
-        return "Error: input text contains patterns that could interfere with processing."
-
-    try:
-        llm = ChatAnthropic(model=CLAUDE_MODEL)
-        structured_llm = llm.with_structured_output(DocumentEntities)
-
-        # XML tag delimiters reduce injection surface — Claude is trained to
-        # treat <document> tags as data boundaries rather than instructions.
-        prompt = (
-            "Extract all named entities and key structured fields from the text "
-            "between the <document> tags. Be thorough and include every instance. "
-            "Only extract entities that are explicitly stated in the text.\n\n"
-            f"<document>\n{text}\n</document>"
-        )
-
-        @_api_retry
-        def _invoke():
-            return structured_llm.invoke(prompt)
-
-        result: DocumentEntities = _invoke()
-        lines: list[str] = ["=== Extracted Entities ==="]
-        if result.people:
-            lines.append(f"People: {', '.join(result.people)}")
-        if result.organizations:
-            lines.append(f"Organizations: {', '.join(result.organizations)}")
-        if result.dates:
-            lines.append(f"Dates: {', '.join(result.dates)}")
-        if result.monetary_amounts:
-            lines.append(f"Monetary Amounts: {', '.join(result.monetary_amounts)}")
-        if result.locations:
-            lines.append(f"Locations: {', '.join(result.locations)}")
-        if result.key_terms:
-            lines.append(f"Key Terms: {', '.join(result.key_terms)}")
-        if len(lines) == 1:
-            return "No entities found — text may be too short or non-informational."
-        return "\n".join(lines)
-    except Exception as e:
-        logger.error(f"extract_entities failed: {e}")
-        return f"Error extracting entities: {type(e).__name__}. Please try again."
+def _format_entities(result: DocumentEntities) -> str:
+    """Format extracted entities into a readable string."""
+    lines: list[str] = ["=== Extracted Entities ==="]
+    if result.people:
+        lines.append(f"People: {', '.join(result.people)}")
+    if result.organizations:
+        lines.append(f"Organizations: {', '.join(result.organizations)}")
+    if result.dates:
+        lines.append(f"Dates: {', '.join(result.dates)}")
+    if result.monetary_amounts:
+        lines.append(f"Monetary Amounts: {', '.join(result.monetary_amounts)}")
+    if result.locations:
+        lines.append(f"Locations: {', '.join(result.locations)}")
+    if result.key_terms:
+        lines.append(f"Key Terms: {', '.join(result.key_terms)}")
+    if len(lines) == 1:
+        return "No entities found — text may be too short or non-informational."
+    return "\n".join(lines)
 
 
-# Exported registry — agent.py imports this list
-TOOLS = [search_documents, calculate, web_search, extract_entities]
+# ── Tool builder ─────────────────────────────────────────────────────────────
+# extract_entities needs an LLM instance. By defining it inside build_tools(),
+# it captures the LLM via closure — so the eval can swap models fairly.
+
+def build_tools(llm=None):
+    """Build the tool list. If llm is provided, extract_entities uses it.
+
+    The three stateless tools (search_documents, calculate, web_search) are
+    module-level singletons. Only extract_entities is rebuilt per call so it
+    can capture a different LLM for multi-model evaluation.
+    """
+
+    @tool
+    def extract_entities(text: str) -> str:
+        """Extract structured named entities and key fields from a passage of document text.
+        Returns a structured breakdown of: people, organizations, dates, monetary amounts,
+        locations, and key terms found in the text. Use this tool when you need to identify
+        and organize specific information from retrieved document passages, such as parsing
+        contract parties, invoice details, or report metadata."""
+        if len(text) > MAX_EXTRACT_TEXT_LENGTH:
+            return f"Error: text too long ({len(text)} chars, max {MAX_EXTRACT_TEXT_LENGTH})."
+        if len(text.strip()) < 10:
+            return "Error: text too short for meaningful entity extraction."
+
+        if _INJECTION_PATTERNS.search(text):
+            logger.warning("Possible prompt injection detected in extract_entities input")
+            return "Error: input text contains patterns that could interfere with processing."
+
+        try:
+            _llm = llm or ChatAnthropic(model=CLAUDE_MODEL)
+            structured_llm = _llm.with_structured_output(DocumentEntities)
+
+            prompt = (
+                "Extract all named entities and key structured fields from the text "
+                "between the <document> tags. Be thorough and include every instance. "
+                "Only extract entities that are explicitly stated in the text.\n\n"
+                f"<document>\n{text}\n</document>"
+            )
+
+            @_api_retry
+            def _invoke():
+                return structured_llm.invoke(prompt)
+
+            result: DocumentEntities = _invoke()
+            return _format_entities(result)
+        except Exception as e:
+            logger.error(f"extract_entities failed: {e}")
+            return f"Error extracting entities: {type(e).__name__}. Please try again."
+
+    return [search_documents, calculate, web_search, extract_entities]
+
+
+# Default tool list — backward compatible with existing imports
+TOOLS = build_tools()
