@@ -261,7 +261,25 @@ def query_agent(agent: AgentExecutor, query: str) -> dict:
             "intermediate_steps": [],
         }
 
-    answer = result.get("output", "").strip()
+    output = result.get("output", "")
+    if isinstance(output, list):
+        # Newer LangChain versions may return a list of content blocks
+        parts = []
+        for item in output:
+            content = item.content if hasattr(item, "content") else item
+            if isinstance(content, dict):
+                parts.append(content.get("text", str(content)))
+            elif isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        parts.append(block.get("text", str(block)))
+                    else:
+                        parts.append(str(block))
+            else:
+                parts.append(str(content))
+        answer = "\n".join(parts).strip()
+    else:
+        answer = str(output).strip()
     intermediate_steps = result.get("intermediate_steps", [])
 
     # ── 3. Collect retrieved snippets (for fallback display) ──────────────
