@@ -19,6 +19,8 @@ CHROMADB PERSISTENCE:
   the existing collection — no re-ingestion needed across runs.
 """
 
+import logging
+
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -28,6 +30,8 @@ from src.config import (
     COLLECTION_NAME,
     EMBEDDING_MODEL,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ChromaStore:
@@ -43,21 +47,43 @@ class ChromaStore:
 
         # HuggingFaceEmbeddings downloads the model on first use (~80 MB) and
         # caches it locally. Subsequent runs are instant.
-        self._embeddings = HuggingFaceEmbeddings(model_name=embedding_model)
+        try:
+            self._embeddings = HuggingFaceEmbeddings(model_name=embedding_model)
+        except Exception as e:
+            logger.error(f"Failed to load embedding model '{embedding_model}': {e}")
+            raise RuntimeError(
+                f"Could not initialize embedding model '{embedding_model}'. "
+                f"Check your internet connection for first-time download."
+            ) from e
 
-        self._store = Chroma(
-            collection_name=collection_name,
-            embedding_function=self._embeddings,
-            persist_directory=persist_directory,
-        )
+        try:
+            self._store = Chroma(
+                collection_name=collection_name,
+                embedding_function=self._embeddings,
+                persist_directory=persist_directory,
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize ChromaDB: {e}")
+            raise RuntimeError(
+                f"Could not initialize ChromaDB at '{persist_directory}'. "
+                f"Check directory permissions."
+            ) from e
 
     def add_documents(self, chunks: list[Document]) -> None:
         """Embed chunks and upsert them into ChromaDB."""
-        self._store.add_documents(chunks)
+        try:
+            self._store.add_documents(chunks)
+        except Exception as e:
+            logger.error(f"Failed to add {len(chunks)} documents: {e}")
+            raise RuntimeError(f"Failed to store documents in ChromaDB: {e}") from e
 
     def similarity_search(self, query: str, k: int = 5) -> list[Document]:
         """Return the k most semantically similar chunks to query."""
-        return self._store.similarity_search(query, k=k)
+        try:
+            return self._store.similarity_search(query, k=k)
+        except Exception as e:
+            logger.error(f"Similarity search failed: {e}")
+            return []
 
     def similarity_search_with_score(
         self, query: str, k: int = 5
@@ -68,7 +94,11 @@ class ChromaStore:
           ~0.0 = nearly identical meaning, >1.5 = likely unrelated.
         Practically, scores below ~1.0 indicate a strong semantic match.
         """
-        return self._store.similarity_search_with_score(query, k=k)
+        try:
+            return self._store.similarity_search_with_score(query, k=k)
+        except Exception as e:
+            logger.error(f"Similarity search with score failed: {e}")
+            return []
 
     def count(self) -> int:
         """Return the number of chunks currently stored in the collection."""

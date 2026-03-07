@@ -16,4 +16,5 @@ dependencies = [
     "pypdf>=6.7.5",
     "sentence-transformers>=5.2.3",
     "tavily-python>=0.7.22",
+    "tenacity>=9.1.4",
 ]

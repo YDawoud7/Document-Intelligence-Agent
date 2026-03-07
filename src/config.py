@@ -27,3 +27,19 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 # Haiku is fast and cheap — ideal for agentic loops where multiple LLM calls happen
 # per query (tool routing + synthesis). Swap for claude-sonnet-4-6 for higher quality.
 CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+
+# ── Guardrail limits ─────────────────────────────────────────────────────────
+# These caps stop bad input before it reaches expensive APIs.
+MAX_QUERY_LENGTH = 10_000          # max chars for agent queries and tool searches
+MAX_EXPRESSION_LENGTH = 1_000      # max chars for calculator expressions
+MAX_EXTRACT_TEXT_LENGTH = 50_000   # max chars for entity extraction input
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+# config.py is imported first by everything, so this runs early.
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+    datefmt="%H:%M:%S",
+)

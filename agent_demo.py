@@ -12,7 +12,7 @@ The demo runs all 12 queries sequentially and prints the agent's tool calls
 (via verbose=True in AgentExecutor) plus the final answer for each.
 """
 
-from src.agent.agent import build_agent
+from src.agent.agent import build_agent, query_agent
 
 QUERIES = [
     # ── Document Q&A — search_documents ─────────────────────────────────────
@@ -111,11 +111,12 @@ def run_demo() -> None:
         print(f"  Query: {item['query']}")
         print(f"{'─' * 70}")
 
-        try:
-            result = agent.invoke({"input": item["query"]})
-            print(f"\n  ANSWER: {result['output']}")
-        except Exception as e:
-            print(f"\n  ERROR: {e}")
+        result = query_agent(agent, item["query"])
+        print(f"\n  ANSWER: {result['answer']}")
+        if result["warning"]:
+            print(f"  WARNING: {result['warning']}")
+        if not result["success"]:
+            print(f"  STATUS: Failed/fallback")
 
 
 if __name__ == "__main__":
