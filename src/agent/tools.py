@@ -128,7 +128,8 @@ def web_search(query: str) -> str:
     topic requiring up-to-date information from the internet.
     Returns a summary of the top search results."""
     tavily = TavilySearch(max_results=3)
-    results = tavily.invoke({"query": query})
+    response = tavily.invoke({"query": query})
+    results = response.get("results", [])
     if not results:
         return "No web results found."
     parts: list[str] = []
