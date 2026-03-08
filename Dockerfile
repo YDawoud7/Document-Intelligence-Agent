@@ -31,5 +31,9 @@ VOLUME ["/data/documents", "/data/chroma_db"]
 ENV DOCUMENTS_DIR=/data/documents
 ENV CHROMA_PERSIST_DIR=/data/chroma_db
 
-# Default: interactive REPL. Override with a query string or 'manage.py ...'
-CMD ["uv", "run", "python", "query.py"]
+EXPOSE 8000
+
+# REST API (default). Override CMD for CLI use:
+#   docker run ... doc-agent uv run python query.py
+#   docker run ... doc-agent uv run python manage.py list
+CMD ["uv", "run", "uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
