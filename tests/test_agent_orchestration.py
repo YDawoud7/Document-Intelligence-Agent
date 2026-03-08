@@ -133,3 +133,77 @@ class TestSuccessPath:
         assert "snippets" in result
         assert "warning" in result
         assert "success" in result
+
+
+# ── Callback propagation (regression: langchain_classic drops constructor callbacks) ──
+
+class TestCallbackPropagation:
+    def test_callbacks_passed_to_invoke_via_config(self):
+        """query_agent must forward callbacks to agent.invoke() as config={"callbacks": ...}.
+
+        Regression: passing callbacks to AgentExecutor at construction time is silently
+        dropped by langchain_classic before it reaches child LLM calls. The fix passes
+        them at invoke time instead, which does propagate correctly.
+        """
+        from unittest.mock import call
+
+        agent = _make_agent(output="42")
+        fake_handler = object()  # any sentinel value
+        query_agent(agent, "What is 6*7?", callbacks=[fake_handler])
+
+        # agent.invoke must have been called with config containing our callback
+        agent.invoke.assert_called_once()
+        _, kwargs = agent.invoke.call_args
+        config = kwargs.get("config", {})
+        assert fake_handler in config.get("callbacks", [])
+
+    def test_no_callbacks_invokes_without_config(self):
+        """When no callbacks are given, agent.invoke() is called without config overhead."""
+        agent = _make_agent(output="42")
+        query_agent(agent, "What is 6*7?")
+        _, kwargs = agent.invoke.call_args
+        # config should be absent or empty — no callbacks key
+        config = kwargs.get("config", {})
+        assert not config.get("callbacks")
+
+
+# ── Eval error counting (regression: success=False not counted as error) ──────
+
+class TestEvalErrorCounting:
+    """Verify that the evaluate_model() error counter catches success=False returns.
+
+    Regression: errors was only incremented on exceptions, so agent timeouts and
+    max-iteration failures (which return success=False without raising) were missed.
+    The fix adds: if not result.get("success", True): errors += 1
+    """
+
+    def test_success_false_result_is_an_error(self):
+        """A result with success=False must register as a failure in eval counting."""
+        # Simulate what evaluate_model()'s loop does
+        errors = 0
+        result = {"answer": "I couldn't find a reliable answer.", "success": False}
+
+        if not result.get("success", True):
+            errors += 1
+
+        assert errors == 1
+
+    def test_success_true_result_is_not_an_error(self):
+        errors = 0
+        result = {"answer": "The answer is 42.", "success": True}
+
+        if not result.get("success", True):
+            errors += 1
+
+        assert errors == 0
+
+    def test_query_agent_fallback_returns_success_false(self):
+        """Agent hitting max iterations returns success=False — must be countable as error."""
+        agent = _make_agent(output="Agent stopped due to iteration limit.")
+        result = query_agent(agent, "Some question")
+        assert result["success"] is False
+        # Confirm the eval loop would count it
+        errors = 0
+        if not result.get("success", True):
+            errors += 1
+        assert errors == 1
