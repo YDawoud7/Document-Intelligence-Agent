@@ -28,7 +28,6 @@ import operator
 import re
 
 from anthropic import APIConnectionError, RateLimitError
-from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
 from pydantic import BaseModel, Field
@@ -281,7 +280,11 @@ def build_tools(llm=None):
             return "Error: input text contains patterns that could interfere with processing."
 
         try:
-            _llm = llm or ChatAnthropic(model=CLAUDE_MODEL)
+            if llm is None:
+                from langchain_anthropic import ChatAnthropic
+                _llm = ChatAnthropic(model=CLAUDE_MODEL)
+            else:
+                _llm = llm
             structured_llm = _llm.with_structured_output(DocumentEntities)
 
             prompt = (

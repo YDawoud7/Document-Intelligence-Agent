@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.env
+eval_results/
+data/chroma_db/
+.git/
+.gitignore
+examples/
+eval/
+tests/

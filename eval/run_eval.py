@@ -26,7 +26,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from src.agent.agent import build_agent, query_agent
-from src.config import EVAL_RESULTS_DIR, MODEL_PRICING, SUPPORTED_MODELS
+from src.config import EVAL_RESULTS_DIR, MODEL_PRICING, SUPPORTED_MODELS, configure_logging
+
+configure_logging()
 from src.observability.token_tracker import TokenTrackingHandler
 from src.vectorstore.chroma_store import ChromaStore
 

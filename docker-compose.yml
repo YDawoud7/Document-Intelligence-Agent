@@ -1,0 +1,12 @@
+services:
+  agent:
+    build: .
+    env_file: .env
+    environment:
+      - DOCUMENTS_DIR=/data/documents
+      - CHROMA_PERSIST_DIR=/data/chroma_db
+    volumes:
+      - ./data/documents:/data/documents
+      - ./data/chroma_db:/data/chroma_db
+    stdin_open: true
+    tty: true

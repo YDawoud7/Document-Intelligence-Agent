@@ -1,11 +1,14 @@
+import os
 from pathlib import Path
 
 # Project root
 ROOT_DIR = Path(__file__).parent.parent
 
-# Directories
-DOCUMENTS_DIR = ROOT_DIR / "data" / "documents"
-CHROMA_PERSIST_DIR = ROOT_DIR / "data" / "chroma_db"
+# Directories — overridable via environment variables for container deployments.
+# In Docker, mount volumes and point these at the mount paths:
+#   docker run -e DOCUMENTS_DIR=/data/documents -e CHROMA_PERSIST_DIR=/data/chroma_db ...
+DOCUMENTS_DIR = Path(os.environ.get("DOCUMENTS_DIR", str(ROOT_DIR / "data" / "documents")))
+CHROMA_PERSIST_DIR = Path(os.environ.get("CHROMA_PERSIST_DIR", str(ROOT_DIR / "data" / "chroma_db")))
 
 # ChromaDB
 COLLECTION_NAME = "enterprise_docs"
@@ -35,14 +38,20 @@ MAX_EXPRESSION_LENGTH = 1_000      # max chars for calculator expressions
 MAX_EXTRACT_TEXT_LENGTH = 50_000   # max chars for entity extraction input
 
 # ── Logging ──────────────────────────────────────────────────────────────────
-# config.py is imported first by everything, so this runs early.
 import logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
-    datefmt="%H:%M:%S",
-)
+
+def configure_logging(level: str = "INFO") -> None:
+    """Configure the root logger. Call once from each CLI entry point.
+
+    Not called at import time so that frameworks (FastAPI, pytest) can manage
+    their own logging setup without conflict.
+    """
+    logging.basicConfig(
+        level=getattr(logging, level.upper(), logging.INFO),
+        format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+        datefmt="%H:%M:%S",
+    )
 
 # ── Model configurations ──────────────────────────────────────────────────────
 # Each entry maps a shorthand name to its provider, model ID, and API key env var.

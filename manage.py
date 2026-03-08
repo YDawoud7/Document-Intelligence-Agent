@@ -18,9 +18,12 @@ import argparse
 import sys
 from pathlib import Path
 
+from src.config import configure_logging
 from src.ingestion.chunker import DocumentChunker
 from src.ingestion.loader import DocumentLoader
 from src.vectorstore.chroma_store import ChromaStore
+
+configure_logging()
 
 
 def cmd_list(store: ChromaStore) -> None:
