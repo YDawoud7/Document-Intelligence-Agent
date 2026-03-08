@@ -214,8 +214,17 @@ def _check_grounding(answer: str, intermediate_steps: list) -> str | None:
 
 # ── Main entry point with full guardrails ─────────────────────────────────────
 
-def query_agent(agent: AgentExecutor, query: str) -> dict:
+def query_agent(agent: AgentExecutor, query: str, callbacks: list | None = None) -> dict:
     """Run a query through the agent with full guardrails.
+
+    Args:
+        agent: The AgentExecutor to run.
+        query: The user's question.
+        callbacks: Optional callback handlers to attach at invoke time.
+            NOTE: langchain_classic AgentExecutor does not propagate callbacks
+            passed at construction time to child LLM calls. Pass them here
+            instead — they are forwarded via config={"callbacks": ...} to
+            agent.invoke(), which does propagate correctly.
 
     Returns a dict with:
       - "answer": the final answer string (may include warnings)
@@ -251,8 +260,9 @@ def query_agent(agent: AgentExecutor, query: str) -> dict:
         }
 
     # ── 2. Run the agent ──────────────────────────────────────────────────
+    invoke_config = {"callbacks": callbacks} if callbacks else {}
     try:
-        result = agent.invoke({"input": query})
+        result = agent.invoke({"input": query}, config=invoke_config)
     except Exception as e:
         logger.error(f"Agent execution failed: {e}")
         return {

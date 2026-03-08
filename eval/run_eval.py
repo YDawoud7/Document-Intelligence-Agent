@@ -79,12 +79,15 @@ def evaluate_model(model_key: str) -> dict:
         start = time.time()
 
         try:
-            result = query_agent(agent, tc["query"])
+            result = query_agent(agent, tc["query"], callbacks=[tracker])
             latency = time.time() - start
 
             intermediate_steps = result.get("intermediate_steps", [])
             routing = score_routing(intermediate_steps, tc["expected_tools"])
             content = score_content(result["answer"], tc["expected_contains"])
+
+            if not result.get("success", True):
+                errors += 1
 
         except Exception as e:
             latency = time.time() - start

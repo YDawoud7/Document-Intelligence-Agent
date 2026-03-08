@@ -22,6 +22,7 @@ GUARDRAILS (Phase 3):
 """
 
 import ast
+import json
 import logging
 import operator
 import re
@@ -294,7 +295,37 @@ def build_tools(llm=None):
             def _invoke():
                 return structured_llm.invoke(prompt)
 
-            result: DocumentEntities = _invoke()
+            try:
+                result: DocumentEntities = _invoke()
+            except Exception as struct_err:
+                # Fallback for models with limited structured output support (e.g. DeepSeek).
+                # Ask the LLM to return raw JSON and parse it manually.
+                logger.warning(
+                    f"Structured output failed ({type(struct_err).__name__}), "
+                    "retrying with JSON prompt fallback"
+                )
+                _ENTITY_KEYS = {
+                    "people", "organizations", "dates",
+                    "monetary_amounts", "locations", "key_terms",
+                }
+                json_prompt = (
+                    "Return ONLY a JSON object with these exact keys (each value is a list of strings): "
+                    "people, organizations, dates, monetary_amounts, locations, key_terms. "
+                    "Extract every entity explicitly stated in the text below.\n\n"
+                    f"Text: {text}"
+                )
+                raw = _llm.invoke(json_prompt)
+                content = raw.content if hasattr(raw, "content") else str(raw)
+                json_match = re.search(r"\{.*\}", content, re.DOTALL)
+                if json_match:
+                    data = json.loads(json_match.group())
+                    result = DocumentEntities(**{
+                        k: v for k, v in data.items()
+                        if k in _ENTITY_KEYS and isinstance(v, list)
+                    })
+                else:
+                    result = DocumentEntities()
+
             return _format_entities(result)
         except Exception as e:
             logger.error(f"extract_entities failed: {e}")
