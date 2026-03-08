@@ -36,7 +36,7 @@ from src.api.models import (
     QueryRequest,
     QueryResponse,
 )
-from src.config import SUPPORTED_MODELS, configure_logging
+from src.config import DOCUMENTS_DIR, SUPPORTED_MODELS, configure_logging
 from src.ingestion.chunker import DocumentChunker
 from src.ingestion.loader import DocumentLoader
 from src.observability.token_tracker import TokenTrackingHandler
@@ -53,6 +53,23 @@ async def lifespan(app: FastAPI):
 
     app.state.store = ChromaStore()
     logger.info(f"ChromaDB ready — {app.state.store.count()} chunks loaded.")
+
+    # Auto-ingest any PDFs in DOCUMENTS_DIR that aren't already in the store.
+    # Skips files already indexed so restarts are safe and fast.
+    if DOCUMENTS_DIR.exists():
+        existing = app.state.store.list_sources()
+        loader, chunker = DocumentLoader(), DocumentChunker()
+        for pdf in sorted(DOCUMENTS_DIR.glob("*.pdf")):
+            if pdf.name in existing:
+                logger.info(f"Skipping '{pdf.name}' (already indexed).")
+                continue
+            try:
+                docs = loader.load_pdf(pdf)
+                chunks = chunker.chunk(docs)
+                app.state.store.add_documents(chunks)
+                logger.info(f"Auto-ingested '{pdf.name}': {len(chunks)} chunks.")
+            except Exception as e:
+                logger.error(f"Failed to ingest '{pdf.name}': {e}")
 
     app.state.agents: dict = {}
     for key, config in SUPPORTED_MODELS.items():

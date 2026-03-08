@@ -136,11 +136,12 @@ The API starts at `http://localhost:8000`. Open `http://localhost:8000/docs` for
 **Add your documents:**
 
 ```bash
-# From host machine (documents are volume-mounted)
+# Drop PDFs into data/documents/ before starting — they are auto-ingested at startup
 cp your_contracts/*.pdf data/documents/
+docker compose up --build
 
-# Or use the management CLI inside the container
-docker exec -it <container_id> uv run python manage.py add /data/documents/
+# Or upload at runtime via the API (no restart needed)
+curl -X POST http://localhost:8000/documents -F "file=@contract_2024.pdf"
 ```
 
 ---
