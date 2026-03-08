@@ -173,11 +173,19 @@ curl -X POST http://localhost:8000/documents \
 ```
 
 ### `DELETE /documents/{filename}`
-Remove all chunks for a document.
+Remove all chunks for a specific document.
 
 ```bash
 curl -X DELETE http://localhost:8000/documents/contract_2024.pdf
 # {"filename":"contract_2024.pdf","chunks_removed":42,"total_chunks":60}
+```
+
+### `DELETE /documents`
+Remove all documents and wipe the vector store entirely.
+
+```bash
+curl -X DELETE http://localhost:8000/documents
+# {"documents_removed":5,"chunks_removed":312}
 ```
 
 ### `POST /query`

@@ -45,6 +45,11 @@ class DocumentDeleteResponse(BaseModel):
     total_chunks: int
 
 
+class DocumentClearResponse(BaseModel):
+    documents_removed: int
+    chunks_removed: int
+
+
 class HealthResponse(BaseModel):
     status: str = Field(description='"ok" or "degraded"')
     documents_loaded: int

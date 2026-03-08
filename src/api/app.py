@@ -28,6 +28,7 @@ load_dotenv()
 
 from src.agent.agent import build_agent, query_agent
 from src.api.models import (
+    DocumentClearResponse,
     DocumentDeleteResponse,
     DocumentListResponse,
     DocumentUploadResponse,
@@ -161,6 +162,20 @@ async def upload_document(file: UploadFile = File(...)):
         filename=file.filename,
         chunks_added=len(chunks),
         total_chunks=app.state.store.count(),
+    )
+
+
+@app.delete("/documents", response_model=DocumentClearResponse, tags=["Documents"])
+def clear_all_documents():
+    """Remove every document and all their chunks from the vector store."""
+    sources = app.state.store.list_sources()
+    total_chunks = 0
+    for filename in list(sources.keys()):
+        total_chunks += app.state.store.delete_document(filename)
+    logger.info(f"Cleared all documents: {len(sources)} files, {total_chunks} chunks removed")
+    return DocumentClearResponse(
+        documents_removed=len(sources),
+        chunks_removed=total_chunks,
     )
 
 
