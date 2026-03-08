@@ -14,3 +14,7 @@ wheels/
 
 # Eval output
 eval_results/
+
+# Data — not committed; bring your own documents
+data/documents/
+data/chroma_db/
