@@ -42,7 +42,7 @@ from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.agent.tools import build_tools
-from src.config import CLAUDE_MODEL, MAX_QUERY_LENGTH
+from src.config import CLAUDE_MODEL, GROUNDING_THRESHOLD, MAX_AGENT_ITERATIONS, MAX_QUERY_LENGTH
 
 load_dotenv()  # reads API keys from .env
 
@@ -101,6 +101,7 @@ def build_agent(
     provider: str = "anthropic",
     model_name: str | None = None,
     callbacks: list | None = None,
+    store=None,
 ) -> AgentExecutor:
     """Construct and return a ready-to-invoke AgentExecutor.
 
@@ -108,11 +109,13 @@ def build_agent(
         provider: "anthropic" (default), "openai", or "deepseek".
         model_name: Override the default model for the provider.
         callbacks: Optional list of callback handlers (e.g. TokenTrackingHandler).
+        store: Optional ChromaStore to inject into search_documents. Pass
+               app.state.store from FastAPI so only one store instance exists.
     """
     llm = _create_llm(provider, model_name)
 
-    # build_tools(llm) ensures extract_entities uses the same model as the agent
-    tools = build_tools(llm)
+    # Pass both llm and store so each tool uses the right dependency
+    tools = build_tools(llm, store=store)
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
@@ -127,7 +130,7 @@ def build_agent(
         agent=agent,
         tools=tools,
         verbose=True,               # prints tool calls and intermediate steps
-        max_iterations=6,           # safety cap against infinite tool loops
+        max_iterations=MAX_AGENT_ITERATIONS,
         handle_parsing_errors=True, # feeds malformed tool calls back to the LLM to retry
         return_intermediate_steps=True,  # needed for output guardrails
         callbacks=callbacks,
@@ -200,7 +203,7 @@ def _check_grounding(answer: str, intermediate_steps: list) -> str | None:
     grounded_count = sum(1 for p in key_phrases if p in retrieved_lower)
     grounding_ratio = grounded_count / len(key_phrases)
 
-    if grounding_ratio < 0.15:
+    if grounding_ratio < GROUNDING_THRESHOLD:
         logger.warning(
             f"Low grounding score: {grounding_ratio:.2f} "
             f"({grounded_count}/{len(key_phrases)} phrases)"

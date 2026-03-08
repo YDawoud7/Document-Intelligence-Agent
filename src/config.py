@@ -36,6 +36,12 @@ CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 MAX_QUERY_LENGTH = 10_000          # max chars for agent queries and tool searches
 MAX_EXPRESSION_LENGTH = 1_000      # max chars for calculator expressions
 MAX_EXTRACT_TEXT_LENGTH = 50_000   # max chars for entity extraction input
+MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB — prevents OOM on file upload
+
+# ── Agent tuning ──────────────────────────────────────────────────────────────
+SEARCH_RESULTS_K = 4          # top-k chunks returned by similarity search
+MAX_AGENT_ITERATIONS = 6      # safety cap on the tool-call loop
+GROUNDING_THRESHOLD = 0.15    # min phrase overlap fraction to consider an answer grounded
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 import logging

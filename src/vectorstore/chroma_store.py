@@ -21,6 +21,7 @@ CHROMADB PERSISTENCE:
 
 import logging
 
+import chromadb
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -57,11 +58,17 @@ class ChromaStore:
             ) from e
 
         try:
+            # Create a persistent chromadb client; reuse it for both the
+            # langchain-chroma wrapper (similarity search) and direct admin ops
+            # (count, list, delete) so we use chromadb's public API throughout.
+            self._client = chromadb.PersistentClient(path=persist_directory)
             self._store = Chroma(
+                client=self._client,
                 collection_name=collection_name,
                 embedding_function=self._embeddings,
-                persist_directory=persist_directory,
             )
+            # Direct collection reference — public chromadb API, no private attrs
+            self._col = self._client.get_or_create_collection(collection_name)
         except Exception as e:
             logger.error(f"Failed to initialize ChromaDB: {e}")
             raise RuntimeError(
@@ -102,11 +109,11 @@ class ChromaStore:
 
     def count(self) -> int:
         """Return the number of chunks currently stored in the collection."""
-        return self._store._collection.count()
+        return self._col.count()
 
     def list_sources(self) -> dict[str, int]:
         """Return {filename: chunk_count} for every document in the collection."""
-        result = self._store._collection.get(include=["metadatas"])
+        result = self._col.get(include=["metadatas"])
         counts: dict[str, int] = {}
         for meta in result["metadatas"]:
             src = meta.get("source", "unknown")
@@ -119,8 +126,8 @@ class ChromaStore:
         ChromaDB requires deletion by ID, so we first fetch matching IDs via a
         metadata filter, then delete them in one call.
         """
-        result = self._store._collection.get(where={"source": source}, include=[])
+        result = self._col.get(where={"source": source}, include=[])
         ids = result["ids"]
         if ids:
-            self._store._collection.delete(ids=ids)
+            self._col.delete(ids=ids)
         return len(ids)

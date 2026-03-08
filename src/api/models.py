@@ -1,11 +1,13 @@
 """Pydantic request/response models for the Document Intelligence API."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
 class QueryRequest(BaseModel):
     query: str = Field(..., description="The question to ask the agent.")
-    model: str = Field(
+    model: Literal["haiku", "gpt4o", "deepseek"] = Field(
         default="haiku",
         description='Model to use: "haiku" (default), "gpt4o", or "deepseek".',
     )

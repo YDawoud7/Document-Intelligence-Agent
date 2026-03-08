@@ -26,6 +26,7 @@ import json
 import logging
 import operator
 import re
+import threading
 
 from anthropic import APIConnectionError, RateLimitError
 from langchain_core.tools import tool
@@ -43,6 +44,7 @@ from src.config import (
     MAX_EXPRESSION_LENGTH,
     MAX_EXTRACT_TEXT_LENGTH,
     MAX_QUERY_LENGTH,
+    SEARCH_RESULTS_K,
 )
 from src.vectorstore.chroma_store import ChromaStore
 
@@ -81,41 +83,19 @@ _INJECTION_PATTERNS = re.compile(
 
 # ── Tool 1: Document RAG search ──────────────────────────────────────────────
 
-# Lazy singleton so the HuggingFace model (~80 MB) only loads on first tool call.
+# Lazy singleton for non-API usage (CLI, manage.py). Thread-safe via a lock.
+# When used via FastAPI, build_tools(store=...) injects the shared app.state.store
+# instead, so this singleton is never created.
 _store: ChromaStore | None = None
+_store_lock = threading.Lock()
 
 
 def _get_store() -> ChromaStore:
     global _store
-    if _store is None:
-        _store = ChromaStore()
+    with _store_lock:
+        if _store is None:
+            _store = ChromaStore()
     return _store
-
-
-@tool
-def search_documents(query: str) -> str:
-    """Search the enterprise document knowledge base for information relevant to
-    the query. Use this tool when answering questions about document contents,
-    policies, contracts, invoices, reports, or any internally stored text.
-    Returns the top matching passages with their source file and page number."""
-    if len(query) > MAX_QUERY_LENGTH:
-        return f"Error: query too long ({len(query)} chars, max {MAX_QUERY_LENGTH})."
-
-    try:
-        store = _get_store()
-        results = store.similarity_search(query, k=4)
-        if not results:
-            return "No relevant documents found for this query."
-        parts: list[str] = []
-        for i, doc in enumerate(results, start=1):
-            source = doc.metadata.get("source", "unknown")
-            page = doc.metadata.get("page", "?")
-            snippet = doc.page_content.strip()
-            parts.append(f"[{i}] Source: {source}, Page: {page}\n{snippet}")
-        return "\n\n---\n\n".join(parts)
-    except Exception as e:
-        logger.error(f"search_documents failed: {e}")
-        return f"Error searching documents: {type(e).__name__}. Please try again."
 
 
 # ── Tool 2: Safe calculator ──────────────────────────────────────────────────
@@ -252,16 +232,45 @@ def _format_entities(result: DocumentEntities) -> str:
 
 
 # ── Tool builder ─────────────────────────────────────────────────────────────
-# extract_entities needs an LLM instance. By defining it inside build_tools(),
-# it captures the LLM via closure — so the eval can swap models fairly.
+# Both search_documents and extract_entities are defined inside build_tools()
+# so they can capture injected dependencies (store, llm) via closure.
+# This keeps the API agent and the global singleton independent — no shared state.
 
-def build_tools(llm=None):
-    """Build the tool list. If llm is provided, extract_entities uses it.
+def build_tools(llm=None, store=None):
+    """Build the tool list with optional injected dependencies.
 
-    The three stateless tools (search_documents, calculate, web_search) are
-    module-level singletons. Only extract_entities is rebuilt per call so it
-    can capture a different LLM for multi-model evaluation.
+    Args:
+        llm: If provided, extract_entities uses this LLM (enables multi-model eval).
+        store: If provided, search_documents uses this ChromaStore (avoids a second
+               instance when called from FastAPI, where app.state.store already exists).
+               Defaults to the thread-safe global singleton for CLI usage.
     """
+    _search_store = store  # capture for closure; None → fall back to singleton
+
+    @tool
+    def search_documents(query: str) -> str:
+        """Search the enterprise document knowledge base for information relevant to
+        the query. Use this tool when answering questions about document contents,
+        policies, contracts, invoices, reports, or any internally stored text.
+        Returns the top matching passages with their source file and page number."""
+        if len(query) > MAX_QUERY_LENGTH:
+            return f"Error: query too long ({len(query)} chars, max {MAX_QUERY_LENGTH})."
+
+        try:
+            s = _search_store if _search_store is not None else _get_store()
+            results = s.similarity_search(query, k=SEARCH_RESULTS_K)
+            if not results:
+                return "No relevant documents found for this query."
+            parts: list[str] = []
+            for i, doc in enumerate(results, start=1):
+                source = doc.metadata.get("source", "unknown")
+                page = doc.metadata.get("page", "?")
+                snippet = doc.page_content.strip()
+                parts.append(f"[{i}] Source: {source}, Page: {page}\n{snippet}")
+            return "\n\n---\n\n".join(parts)
+        except Exception as e:
+            logger.error(f"search_documents failed: {e}")
+            return f"Error searching documents: {type(e).__name__}. Please try again."
 
     @tool
     def extract_entities(text: str) -> str:
@@ -337,5 +346,10 @@ def build_tools(llm=None):
     return [search_documents, calculate, web_search, extract_entities]
 
 
-# Default tool list — backward compatible with existing imports
+# Default tool list — backward compatible with existing imports (CLI, tests).
+# Uses the thread-safe global singleton; no store injection needed outside FastAPI.
 TOOLS = build_tools()
+
+# Re-export individual tools so existing imports still work:
+#   from src.agent.tools import search_documents
+search_documents, calculate, web_search, extract_entities = TOOLS

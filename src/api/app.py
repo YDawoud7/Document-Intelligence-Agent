@@ -36,7 +36,7 @@ from src.api.models import (
     QueryRequest,
     QueryResponse,
 )
-from src.config import DOCUMENTS_DIR, SUPPORTED_MODELS, configure_logging
+from src.config import DOCUMENTS_DIR, MAX_UPLOAD_SIZE_BYTES, SUPPORTED_MODELS, configure_logging
 from src.ingestion.chunker import DocumentChunker
 from src.ingestion.loader import DocumentLoader
 from src.observability.token_tracker import TokenTrackingHandler
@@ -81,6 +81,7 @@ async def lifespan(app: FastAPI):
             app.state.agents[key] = build_agent(
                 provider=config["provider"],
                 model_name=config["model_name"],
+                store=app.state.store,
             )
             logger.info(f"Agent ready: {key} ({config['model_name']})")
         except Exception as e:
@@ -113,10 +114,12 @@ def health():
     """Check system status: ChromaDB reachability and available models."""
     try:
         doc_count = app.state.store.count()
-        status = "ok" if app.state.agents else "degraded"
+        store_ok = True
     except Exception:
         doc_count = 0
-        status = "degraded"
+        store_ok = False
+
+    status = "ok" if (store_ok and app.state.agents) else "degraded"
 
     return HealthResponse(
         status=status,
@@ -146,6 +149,9 @@ async def upload_document(file: UploadFile = File(...)):
     contents = await file.read()
     if not contents:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if len(contents) > MAX_UPLOAD_SIZE_BYTES:
+        mb = MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"File too large (max {mb} MB).")
 
     # Write to a temp file so DocumentLoader (which expects a path) can read it
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
