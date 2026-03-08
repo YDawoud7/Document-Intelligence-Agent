@@ -84,10 +84,12 @@ def _create_llm(provider: str = "anthropic", model_name: str | None = None):
             max_tokens=2048,
         )
     elif provider == "deepseek":
+        import os
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
             model=model_name or "deepseek-chat",
             base_url="https://api.deepseek.com/v1",
+            api_key=os.environ.get("DEEPSEEK_API_KEY"),
             temperature=0,
             max_tokens=2048,
         )
