@@ -15,13 +15,13 @@ Built to demonstrate what production AI systems look like in practice: not just 
 
 ## Demo
 
-> **Add your screenshots and/or GIF here.**
->
-> Suggested captures:
-> 1. `http://localhost:8000/docs` — Swagger UI with a POST /query response expanded
-> 2. Terminal GIF of the REPL: `python query.py` asking a few follow-up questions
->
-> Tools: [Kap](https://getkap.co) (macOS), [asciinema](https://asciinema.org), or [LICEcap](https://www.cockos.com/licecap/)
+**REST API — Swagger UI (`POST /query`)**
+
+![API query demo](assets/api_query_demo.png)
+
+**CLI — Interactive REPL (`python query.py`)**
+
+![CLI query demo](assets/CLI_query_demo.gif)
 
 ---
 
@@ -305,9 +305,12 @@ Evaluation script: `eval/run_eval.py`. Results are saved as CSV to `eval_results
 ├── examples/
 │   ├── RAG_demo.py           # Phase 1: ingestion pipeline walkthrough
 │   └── agent_demo.py         # Phase 2: tool-calling agent demo
+├── assets/
+│   ├── api_query_demo.png    # Swagger UI screenshot
+│   └── CLI_query_demo.gif    # Interactive REPL demo
 ├── data/
-│   ├── documents/            # Drop PDFs here (or use manage.py / POST /documents)
-│   └── chroma_db/            # ChromaDB persisted storage (auto-created)
+│   ├── documents/            # Drop PDFs here — auto-ingested at startup (gitignored)
+│   └── chroma_db/            # ChromaDB persisted storage (auto-created, gitignored)
 ├── manage.py                 # Document management CLI
 ├── query.py                  # CLI query interface + interactive REPL
 ├── Dockerfile
