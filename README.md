@@ -13,18 +13,6 @@ Built to demonstrate what production AI systems look like in practice: not just 
 
 ---
 
-## Demo
-
-**REST API — Swagger UI (`POST /query`)**
-
-![API query demo](assets/api_query_demo.png)
-
-**CLI — Interactive REPL (`python query.py`)**
-
-![CLI query demo](assets/CLI_query_demo.gif)
-
----
-
 ## Architecture
 
 ```mermaid
@@ -257,6 +245,18 @@ uv run python manage.py add data/documents/report.pdf # ingest a PDF
 uv run python manage.py add data/documents/           # ingest a directory
 uv run python manage.py remove report.pdf             # remove by filename
 ```
+
+---
+
+## Demo
+
+**REST API — Swagger UI (`POST /query`)**
+
+![API query demo](assets/api_query_demo.png)
+
+**CLI — Interactive REPL (`python query.py`)**
+
+![CLI query demo](assets/CLI_query_demo.gif)
 
 ---
 
